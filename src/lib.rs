@@ -54,7 +54,8 @@ impl<T> Queue<T> {
             .lock
             .lock
             .compare_and_swap(false, true, Ordering::Acquire)
-        {}
+        {
+        }
 
         let element = unsafe {
             if !(*self.inner).front.is_null() {
@@ -92,7 +93,8 @@ impl<T> Queue<T> {
             .lock
             .lock
             .compare_and_swap(false, true, Ordering::Acquire)
-        {}
+        {
+        }
 
         unsafe {
             if !(*self.inner).back.is_null() {
@@ -124,12 +126,13 @@ impl<T> Clone for Queue<T> {
 #[cfg(test)]
 mod tests {
     use crate::Queue;
-    use criterion::black_box;
     use criterion::{BatchSize, Criterion, ParameterizedBenchmark};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use criterion::black_box;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
     use std::time;
+
 
     #[test]
     fn test_single_thread() {
@@ -162,7 +165,7 @@ mod tests {
         let num_items = 1_000_000;
 
         for n in [1, 2, 4, 8, 16, 32].iter() {
-            for _ in 0..1 {
+            for _ in 0 .. 1 {
                 run(num_items, *n);
             }
 
@@ -174,12 +177,7 @@ mod tests {
 
             let ns_per = duration.as_nanos() / (num_items as u128 * *n as u128);
 
-            println!(
-                "producers={}, taken={}ms, ns_per={}",
-                n,
-                duration.as_millis(),
-                ns_per
-            );
+            println!("producers={}, taken={}ms, ns_per={}", n, duration.as_millis(), ns_per);
         }
     }
 
@@ -187,12 +185,12 @@ mod tests {
         let queue = Queue::new();
         let done = Arc::new(AtomicUsize::new(0));
 
-        for _ in 0..num_producers {
+        for _ in 0 .. num_producers {
             let done = done.clone();
             let queue = queue.clone();
 
             thread::spawn(move || {
-                for n in 0..items {
+                for n in 0 .. items {
                     queue.push(n);
                 }
 
