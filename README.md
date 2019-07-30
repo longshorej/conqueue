@@ -1,5 +1,8 @@
 # Conqueue
 
+[![Crates.io](https://img.shields.io/crates/v/conqueue.svg?style=flat-square)](https://crates.io/crates/conqueue)
+[![Crates.io](https://img.shields.io/crates/d/conqueue.svg?style=flat-square)](https://crates.io/crates/conqueue)
+
 Conqueue is another multi-producer, single-consumer queue (MPSC) for the Rust programming language.
 
 ## Getting Started
