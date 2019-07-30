@@ -1,5 +1,5 @@
 [package]
-name = "conqueue2"
+name = "conqueue"
 version = "0.1.0"
 authors = ["Jason Longshore <longshorej@gmail.com>"]
 edition = "2018"
