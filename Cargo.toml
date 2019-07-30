@@ -1,6 +1,11 @@
 [package]
 name = "conqueue"
 version = "0.1.0"
-authors = ["Jason Longshore <longshorej@gmail.com>"]
+authors = ["Jason Longshore <hello@jasonlongshore.com>"]
 edition = "2018"
-
+keywords = ["queue", "concurrent", "mpsc", "ms", "channel"]
+license = "MIT"
+repository = "https://github.com/longshorej/conqueue"
+homepage = "https://github.com/longshorej/conqueue"
+description = "Yet another multi-producer, single-consumer queue (MPSC)"
+readme = "README.md"
