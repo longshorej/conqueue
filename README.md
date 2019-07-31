@@ -37,6 +37,10 @@ while let Some(value) = rx.pop() {
 
 ## Release Notes
 
+### 0.1.1 - 2019-07-30
+
+* Senders should be `Send`
+
 ### 0.1.0 - 2019-07-30
 
 * Initial release. Likely not production ready.

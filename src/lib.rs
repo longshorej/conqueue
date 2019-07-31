@@ -53,6 +53,8 @@ unsafe impl<T> Sync for QueueSender<T> {}
 
 unsafe impl<T> Send for QueueSender<T> {}
 
+unsafe impl<T> Send for QueueReceiver<T> {}
+
 pub struct QueueReceiver<T> {
     root: QueueRoot<T>,
 }
