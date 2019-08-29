@@ -11,7 +11,7 @@ To get started, add the following to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-conqueue = "0.1.0"
+conqueue = "0.2.1"
 ```
 
 Then, at the root of your crate:
@@ -21,7 +21,8 @@ extern crate conqueue
 ```
 
 Finally, create a sender/receiver pair. The sender may be cloned to
-allow concurrent producers, and it is both `Send` and `Sync`.
+allow concurrent producers, and it is both `Send` and `Sync`. The
+receiver is `Send` so it may be moved to other threads.
 
 ```rust
 let (tx1, mut rx) = conqueue::Queue::unbounded();
@@ -36,6 +37,10 @@ while let Some(value) = rx.pop() {
 ```
 
 ## Release Notes
+
+### 0.2.1 - 2019-08-29
+
+* Republish to fix README.md on Crates.io
 
 ### 0.2.0 - 2019-08-29
 
@@ -66,7 +71,7 @@ cargo test --release -- --ignored --nocapture
 To release the create, perform the following:
 
 1. Edit `Cargo.toml`, bumping the version as appropriate.
-2. Edit `README.md`, adding an entry to the Release Notes.
+2. Edit `README.md`, adding an entry to the Release Notes, and updating the TOML snippet's version.
 3. Commit these changes and push them to `master`.
 4. Create and push a tag that starts with "v" -- e.g. "v0.2.0"
 
