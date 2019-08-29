@@ -37,6 +37,10 @@ while let Some(value) = rx.pop() {
 
 ## Release Notes
 
+### 0.2.0 - 2019-08-29
+
+* Items that are pushed into a queue are now dropped if there is no receiver
+
 ### 0.1.1 - 2019-07-30
 
 * Senders should be `Send`
@@ -65,7 +69,6 @@ To release the create, perform the following:
 2. Edit `README.md`, adding an entry to the Release Notes.
 3. Commit these changes and push them to `master`.
 4. Create and push a tag that starts with "v" -- e.g. "v0.2.0"
-5. Run `cargo publish`
 
 ## Inspiration
 
