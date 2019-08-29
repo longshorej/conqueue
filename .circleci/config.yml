@@ -1,0 +1,81 @@
+version: 2
+jobs:
+  build-linux:
+    working_directory: ~/project
+    docker:
+      - image: circleci/rust:latest
+    steps:
+      - checkout
+      - restore_cache:
+          key: linux-cargo-cache-1
+      - run:
+          name: Add rustmt
+          command: |
+            rustup component add rustfmt-preview
+      - run:
+          name: Add Clippy
+          command: |
+            rustup component add clippy
+      - run:
+          name: Ensure source code is formatted
+          command: |
+            cargo fmt && git diff --quiet
+      - run:
+          name: Build & Test
+          command: |
+            cargo clean
+            cargo build --release
+            cargo test --release --no-fail-fast
+      - run:
+          name: Run Clippy
+          command: |
+            cargo clippy --tests -- -D warnings
+      - save_cache:
+          key: linux-cargo-cache-1
+          paths:
+          - "~/.cargo"
+
+  publish:
+    working_directory: ~/project
+    docker:
+      - image: circleci/rust:latest
+    steps:
+      - checkout
+      - run:
+          name: Publish
+          command: |
+            set -e
+
+            version=$(git describe --tags | sed -E 's/^v//')
+
+            if [ "$(cat Cargo.toml | grep ci-verify-version$ | grep "^version = \"$version\""  )" = "" ]; then
+              echo "Cargo.toml version hasn't been bumped."
+              exit 1
+            fi
+
+            # Build and test
+            cargo clean
+            cargo build --release
+            cargo test --release --no-fail-fast
+
+            # Publish to Crates.io
+            if [ "$CRATES_API_KEY" != "" ]; then
+              cargo login <<< "$CRATES_API_KEY"
+              cargo publish
+            fi
+
+workflows:
+  version: 2
+
+  build:
+    jobs:
+      - build-linux
+
+  publish:
+    jobs:
+      - publish:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*/

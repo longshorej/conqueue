@@ -59,6 +59,14 @@ To run a benchmark for the queue, execute the following:
 cargo test --release -- --ignored --nocapture
 ```
 
+To release the create, perform the following:
+
+1. Edit `Cargo.toml`, bumping the version as appropriate.
+2. Edit `README.md`, adding an entry to the Release Notes.
+3. Commit these changes and push them to `master`.
+4. Create and push a tag that starts with "v" -- e.g. "v0.2.0"
+5. Run `cargo publish`
+
 ## Inspiration
 
 This code is largely based on [majek](https://github.com/majek)'s
