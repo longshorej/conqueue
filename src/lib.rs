@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
 struct QueueHead<T> {
-    element: T,
+    element: Option<T>,
     next: *mut QueueHead<T>,
 }
 
@@ -25,13 +25,18 @@ pub struct QueueSender<T> {
 impl<T> QueueSender<T> {
     pub fn push(&self, element: T) {
         let mut new = Box::into_raw(Box::new(QueueHead {
-            element,
+            element: Some(element),
             next: ptr::null_mut(),
         }));
 
         loop {
             unsafe {
                 let in_queue = self.in_queue.load(Ordering::SeqCst);
+
+                if !in_queue.is_null() && (*in_queue).element.is_none() {
+                    drop(Box::from_raw(new));
+                    return;
+                }
 
                 (*new).next = in_queue;
 
@@ -40,7 +45,7 @@ impl<T> QueueSender<T> {
                     .compare_and_swap(in_queue, new, Ordering::SeqCst)
                     == in_queue
                 {
-                    break;
+                    return;
                 }
             }
         }
@@ -58,8 +63,6 @@ impl<T> Clone for QueueSender<T> {
 unsafe impl<T> Sync for QueueSender<T> {}
 
 unsafe impl<T> Send for QueueSender<T> {}
-
-unsafe impl<T> Send for QueueReceiver<T> {}
 
 pub struct QueueReceiver<T> {
     in_queue: Arc<AtomicPtr<QueueHead<T>>>,
@@ -101,11 +104,40 @@ impl<T> QueueReceiver<T> {
             unsafe {
                 let head = Box::from_raw(self.out_queue);
                 self.out_queue = head.next;
-                Some(head.element)
+                Some(head.element.unwrap())
             }
         }
     }
 }
+
+impl<T> Drop for QueueReceiver<T> {
+    fn drop(&mut self) {
+        while let Some(_) = self.pop() {}
+
+        let mut ultimate = Box::into_raw(Box::new(QueueHead {
+            element: None,
+            next: ptr::null_mut(),
+        }));
+
+        loop {
+            unsafe {
+                let in_queue = self.in_queue.load(Ordering::SeqCst);
+
+                (*ultimate).next = in_queue;
+
+                if self
+                    .in_queue
+                    .compare_and_swap(in_queue, ultimate, Ordering::SeqCst)
+                    == in_queue
+                {
+                    return;
+                }
+            }
+        }
+    }
+}
+
+unsafe impl<T> Send for QueueReceiver<T> {}
 
 pub struct Queue;
 
@@ -133,7 +165,7 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use crate::Queue;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
     use std::time;
@@ -186,6 +218,31 @@ mod tests {
         assert_eq!(rx.pop(), Some(3));
         assert_eq!(rx.pop(), Some(2));
         assert_eq!(rx.pop(), Some(1));
+    }
+
+    #[test]
+    fn test_disconnected() {
+        struct MyStruct {
+            dropped: Arc<AtomicBool>,
+        }
+
+        impl Drop for MyStruct {
+            fn drop(&mut self) {
+                self.dropped.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let dropped = Arc::new(AtomicBool::new(false));
+
+        let (tx, rx) = Queue::unbounded();
+
+        drop(rx);
+
+        tx.push(MyStruct {
+            dropped: dropped.clone(),
+        });
+
+        assert!(dropped.load(Ordering::SeqCst));
     }
 
     #[test]
