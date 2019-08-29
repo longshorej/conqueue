@@ -7,14 +7,20 @@ struct QueueHead<T> {
     next: *mut QueueHead<T>,
 }
 
-struct QueueRoot<T> {
-    in_queue: Arc<AtomicPtr<QueueHead<T>>>,
-    out_queue: *mut QueueHead<T>,
-}
-
 pub struct QueueSender<T> {
     in_queue: Arc<AtomicPtr<QueueHead<T>>>,
 }
+
+/* @TODO
+ *
+ * Pushing items into a queue currently requires a load
+ * followed by 1 or more compare_and_swap.
+ *
+ * It should be possible to remove this load and increase
+ * performance in some cases.
+ *
+ * See https://github.com/Amanieu/atomic-rs/blob/master/src/ops.rs
+ */
 
 impl<T> QueueSender<T> {
     pub fn push(&self, element: T) {
@@ -56,21 +62,21 @@ unsafe impl<T> Send for QueueSender<T> {}
 unsafe impl<T> Send for QueueReceiver<T> {}
 
 pub struct QueueReceiver<T> {
-    root: QueueRoot<T>,
+    in_queue: Arc<AtomicPtr<QueueHead<T>>>,
+    out_queue: *mut QueueHead<T>,
 }
 
 impl<T> QueueReceiver<T> {
     pub fn pop(&mut self) -> Option<T> {
-        if self.root.out_queue.is_null() {
+        if self.out_queue.is_null() {
             loop {
-                let mut head = self.root.in_queue.load(Ordering::SeqCst);
+                let mut head = self.in_queue.load(Ordering::SeqCst);
 
                 if head.is_null() {
                     break;
                 }
 
                 if self
-                    .root
                     .in_queue
                     .compare_and_swap(head, ptr::null_mut(), Ordering::SeqCst)
                     == head
@@ -78,8 +84,8 @@ impl<T> QueueReceiver<T> {
                     while !head.is_null() {
                         unsafe {
                             let next = (*head).next;
-                            (*head).next = self.root.out_queue;
-                            self.root.out_queue = head;
+                            (*head).next = self.out_queue;
+                            self.out_queue = head;
                             head = next;
                         }
                     }
@@ -89,12 +95,12 @@ impl<T> QueueReceiver<T> {
             }
         }
 
-        if self.root.out_queue.is_null() {
+        if self.out_queue.is_null() {
             None
         } else {
             unsafe {
-                let head = Box::from_raw(self.root.out_queue);
-                self.root.out_queue = head.next;
+                let head = Box::from_raw(self.out_queue);
+                self.out_queue = head.next;
                 Some(head.element)
             }
         }
@@ -113,14 +119,12 @@ impl Queue {
     pub fn unbounded<T>() -> (QueueSender<T>, QueueReceiver<T>) {
         let in_queue = Arc::new(AtomicPtr::new(ptr::null_mut()));
 
-        let root = QueueRoot {
+        let receiver = QueueReceiver {
             in_queue: in_queue.clone(),
             out_queue: ptr::null_mut(),
         };
 
         let sender = QueueSender { in_queue };
-
-        let receiver = QueueReceiver { root };
 
         (sender, receiver)
     }
@@ -227,7 +231,7 @@ mod tests {
     fn benchmark() {
         let num_items = 1_000_000;
 
-        for n in [1, 2, 4, 8, 16, 32].iter() {
+        for n in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
             for _ in 0..1 {
                 run(num_items, *n);
             }
