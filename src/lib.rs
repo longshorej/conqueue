@@ -7,45 +7,44 @@ struct QueueHead<T> {
     next: *mut QueueHead<T>,
 }
 
+/// A `QueueSender` is used to push items into
+/// the queue.
+///
+/// It implements `Send` and `Sync`, thus allowing
+/// multiple callers to concurrent push items.
 pub struct QueueSender<T> {
     in_queue: Arc<AtomicPtr<QueueHead<T>>>,
 }
 
-/* @TODO
- *
- * Pushing items into a queue currently requires a load
- * followed by 1 or more compare_and_swap.
- *
- * It should be possible to remove this load and increase
- * performance in some cases.
- *
- * See https://github.com/Amanieu/atomic-rs/blob/master/src/ops.rs
- */
-
 impl<T> QueueSender<T> {
+    /// Push the supplied element into the queue.
     pub fn push(&self, element: T) {
+        let mut in_queue = ptr::null_mut();
         let mut new = Box::into_raw(Box::new(QueueHead {
             element: Some(element),
-            next: ptr::null_mut(),
+            next: in_queue,
         }));
 
         loop {
-            unsafe {
-                let in_queue = self.in_queue.load(Ordering::SeqCst);
-
-                if !in_queue.is_null() && (*in_queue).element.is_none() {
-                    drop(Box::from_raw(new));
+            match self
+                .in_queue
+                .compare_exchange(in_queue, new, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => {
                     return;
                 }
 
-                (*new).next = in_queue;
+                Err(actual) => {
+                    in_queue = actual;
 
-                if self
-                    .in_queue
-                    .compare_and_swap(in_queue, new, Ordering::SeqCst)
-                    == in_queue
-                {
-                    return;
+                    unsafe {
+                        if !in_queue.is_null() && (*in_queue).element.is_none() {
+                            Box::from_raw(new);
+                            return;
+                        }
+
+                        (*new).next = in_queue;
+                    }
                 }
             }
         }
@@ -64,36 +63,47 @@ unsafe impl<T> Sync for QueueSender<T> {}
 
 unsafe impl<T> Send for QueueSender<T> {}
 
+/// A `QueueReceiver` is used to pop previously
+/// pushed items from the queue.
 pub struct QueueReceiver<T> {
     in_queue: Arc<AtomicPtr<QueueHead<T>>>,
     out_queue: *mut QueueHead<T>,
 }
 
 impl<T> QueueReceiver<T> {
+    /// Pop an item from the queue. If the queue is
+    /// empty, `None` is returned.
     pub fn pop(&mut self) -> Option<T> {
         if self.out_queue.is_null() {
+            let mut head = ptr::null_mut();
+
             loop {
-                let mut head = self.in_queue.load(Ordering::SeqCst);
-
-                if head.is_null() {
-                    break;
-                }
-
-                if self
-                    .in_queue
-                    .compare_and_swap(head, ptr::null_mut(), Ordering::SeqCst)
-                    == head
-                {
-                    while !head.is_null() {
-                        unsafe {
-                            let next = (*head).next;
-                            (*head).next = self.out_queue;
-                            self.out_queue = head;
-                            head = next;
+                match self.in_queue.compare_exchange(
+                    head,
+                    ptr::null_mut(),
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => {
+                        while !head.is_null() {
+                            unsafe {
+                                let next = (*head).next;
+                                (*head).next = self.out_queue;
+                                self.out_queue = head;
+                                head = next;
+                            }
                         }
+
+                        break;
                     }
 
-                    break;
+                    Err(actual) => {
+                        head = actual;
+
+                        if head.is_null() {
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -112,25 +122,30 @@ impl<T> QueueReceiver<T> {
 
 impl<T> Drop for QueueReceiver<T> {
     fn drop(&mut self) {
-        while let Some(_) = self.pop() {}
-
-        let mut ultimate = Box::into_raw(Box::new(QueueHead {
+        let last = Box::into_raw(Box::new(QueueHead {
             element: None,
             next: ptr::null_mut(),
         }));
 
+        let mut head = ptr::null_mut();
+
         loop {
-            unsafe {
-                let in_queue = self.in_queue.load(Ordering::SeqCst);
+            match self
+                .in_queue
+                .compare_exchange(head, last, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => {
+                    while !head.is_null() {
+                        let boxed = unsafe { Box::from_raw(head) };
 
-                (*ultimate).next = in_queue;
+                        head = boxed.next;
+                    }
 
-                if self
-                    .in_queue
-                    .compare_and_swap(in_queue, ultimate, Ordering::SeqCst)
-                    == in_queue
-                {
                     return;
+                }
+
+                Err(actual) => {
+                    head = actual;
                 }
             }
         }
@@ -165,7 +180,7 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use crate::Queue;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
     use std::time;
@@ -223,26 +238,34 @@ mod tests {
     #[test]
     fn test_disconnected() {
         struct MyStruct {
-            dropped: Arc<AtomicBool>,
+            dropped: Arc<AtomicUsize>,
         }
 
         impl Drop for MyStruct {
             fn drop(&mut self) {
-                self.dropped.store(true, Ordering::SeqCst);
+                self.dropped.fetch_add(1, Ordering::SeqCst);
             }
         }
 
-        let dropped = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicUsize::new(0));
 
         let (tx, rx) = Queue::unbounded();
 
+        for _ in 1..=10 {
+            tx.push(MyStruct {
+                dropped: dropped.clone(),
+            });
+        }
+
         drop(rx);
 
-        tx.push(MyStruct {
-            dropped: dropped.clone(),
-        });
+        for _ in 1..=10 {
+            tx.push(MyStruct {
+                dropped: dropped.clone(),
+            });
+        }
 
-        assert!(dropped.load(Ordering::SeqCst));
+        assert_eq!(dropped.load(Ordering::SeqCst), 20);
     }
 
     #[test]
@@ -286,7 +309,7 @@ mod tests {
     #[test]
     #[ignore]
     fn benchmark() {
-        let num_items = 1_000_000;
+        let num_items = 10_000_000;
 
         for n in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
             for _ in 0..1 {
