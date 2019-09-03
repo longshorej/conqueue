@@ -21,6 +21,10 @@ jobs:
           command: |
             cargo fmt && git diff --quiet
       - run:
+          name: Install Dependencies
+          command: |
+            sudo apt-get update -y && sudo apt-get install -y valgrind
+      - run:
           name: Build & Test
           command: |
             cargo clean
@@ -30,6 +34,12 @@ jobs:
           name: Run Clippy
           command: |
             cargo clippy --tests -- -D warnings
+      - run:
+          name: Leak Test
+          command: |
+            cd tests/memory-leak
+            cargo build --release
+            valgrind -q --leak-check=full --error-exitcode=1  ./target/release/memory-leak
       - save_cache:
           key: linux-cargo-cache-1
           paths:

@@ -1,0 +1,8 @@
+[package]
+name = "memory-leak"
+version = "0.1.0"
+authors = ["Jason Longshore <hello@jasonlongshore.com>"]
+edition = "2018"
+
+[dependencies]
+conqueue = { path = "../../" }
