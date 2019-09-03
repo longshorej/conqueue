@@ -11,7 +11,7 @@ To get started, add the following to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-conqueue = "0.2.1"
+conqueue = "0.3.0"
 ```
 
 Then, at the root of your crate:
@@ -37,6 +37,11 @@ while let Some(value) = rx.pop() {
 ```
 
 ## Release Notes
+
+### 0.3.0 - 2019-09-03
+
+* Use compare_exchange, allowing push with a single atomic instruction in certain circumstances
+* Fix a small memory leak when all related senders/receivers are dropped
 
 ### 0.2.1 - 2019-08-29
 
