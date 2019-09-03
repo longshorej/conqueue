@@ -1,3 +1,4 @@
+use std::mem;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
@@ -55,6 +56,22 @@ impl<T> Clone for QueueSender<T> {
     fn clone(&self) -> Self {
         Self {
             in_queue: self.in_queue.clone(),
+        }
+    }
+}
+
+impl<T> Drop for QueueSender<T> {
+    fn drop(&mut self) {
+        let mut in_queue = Arc::new(AtomicPtr::default());
+
+        mem::swap(&mut in_queue, &mut self.in_queue);
+
+        if let Ok(head) = Arc::try_unwrap(in_queue) {
+            let head = head.swap(ptr::null_mut(), Ordering::SeqCst);
+
+            if !head.is_null() {
+                unsafe { Box::from_raw(head) };
+            }
         }
     }
 }
@@ -141,12 +158,24 @@ impl<T> Drop for QueueReceiver<T> {
                         head = boxed.next;
                     }
 
-                    return;
+                    break;
                 }
 
                 Err(actual) => {
                     head = actual;
                 }
+            }
+        }
+
+        let mut in_queue = Arc::new(AtomicPtr::default());
+
+        mem::swap(&mut in_queue, &mut self.in_queue);
+
+        if let Ok(head) = Arc::try_unwrap(in_queue) {
+            let head = head.swap(ptr::null_mut(), Ordering::SeqCst);
+
+            if !head.is_null() {
+                unsafe { Box::from_raw(head) };
             }
         }
     }
