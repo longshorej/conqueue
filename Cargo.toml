@@ -1,6 +1,6 @@
 [package]
 name = "conqueue"
-version = "0.3.0" # ci-verify-version
+version = "0.4.0" # ci-verify-version
 authors = ["Jason Longshore <hello@jasonlongshore.com>"]
 edition = "2018"
 keywords = ["queue", "concurrent", "mpsc", "ms", "channel"]

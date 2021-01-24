@@ -11,7 +11,7 @@ To get started, add the following to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-conqueue = "0.3.0"
+conqueue = "0.4.0"
 ```
 
 Then, at the root of your crate:
@@ -37,6 +37,10 @@ while let Some(value) = rx.pop() {
 ```
 
 ## Release Notes
+
+### 0.4.0 - 2021-01-24
+
+* Fix a major issue with `Sync`, `Send` trait bounds for `QueueSender`, `QueueReceiver`, thanks to @JOE1994
 
 ### 0.3.0 - 2019-09-03
 
